@@ -66,7 +66,7 @@ Add the server entry (replace the path with your actual project location):
 }
 ```
 
-Restart Claude Desktop. You should see a hammer icon (🔨) indicating MCP tools are available.
+Restart Claude Desktop. Go to Settings, Developer and check if the MCP server `welcomedeveloper-todo-agent` is running as expected.
 
 ### Connect with Claude Code
 
