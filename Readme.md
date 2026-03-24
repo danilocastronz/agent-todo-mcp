@@ -66,14 +66,14 @@ Add the server entry (replace the path with your actual project location):
 }
 ```
 
-Restart Claude Desktop. Go to Settings, Developer and check if the MCP server `welcomedeveloper-todo-agent` is running as expected.
+Restart Claude Desktop. Go to Settings, Developer and check if the MCP server `todo-agent` is running as expected.
 
 ### Connect with Claude Code
 
 If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed:
 
 ```bash
-claude mcp add --transport stdio welcomedeveloper-todo-agent -- node /absolute/path/to/agent-todo-mcp/dist/index.js
+claude mcp add --transport stdio todo-agent -- node /absolute/path/to/agent-todo-mcp/dist/index.js
 ```
 
 ## Usage

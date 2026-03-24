@@ -16,7 +16,7 @@ let nextId = 1;
 
 // Create the MCP server
 const server = new McpServer({
-  name: "welcomedeveloper-todo-agent",
+  name: "todo-agent",
   version: "1.0.0",
 });
 
