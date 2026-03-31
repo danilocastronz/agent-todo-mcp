@@ -1,23 +1,16 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { TaskDatabase } from "./database.js";
 
-// Our in-memory task store
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  status: "pending" | "in-progress" | "done";
-  createdAt: string;
-}
-
-const tasks: Map<string, Task> = new Map();
-let nextId = 1;
+// Initialize the database (replaces our in-memory Map!)
+const db = new TaskDatabase();
 
 // Create the MCP server
+// Notice the version bump to 1.1.0 — we did ship a real feature after all
 const server = new McpServer({
   name: "todo-agent",
-  version: "1.0.0",
+  version: "1.1.0",
 });
 
 // Tool: Add a new task
@@ -34,21 +27,13 @@ server.registerTool(
     },
   },
   async ({ title, description }) => {
-    const id = String(nextId++);
-    const task: Task = {
-      id,
-      title,
-      description,
-      status: "pending",
-      createdAt: new Date().toISOString(),
-    };
-    tasks.set(id, task);
+    const task = db.addTask(title, description);
 
     return {
       content: [
         {
           type: "text",
-          text: `Task created successfully!\n\nID: ${id}\nTitle: ${title}\nStatus: pending`,
+          text: `Task created successfully!\n\nID: ${task.id}\nTitle: ${task.title}\nStatus: ${task.status}`,
         },
       ],
     };
@@ -69,19 +54,15 @@ server.registerTool(
     },
   },
   async ({ status }) => {
-    let filteredTasks = Array.from(tasks.values());
+    const tasks = db.listTasks(status);
 
-    if (status !== "all") {
-      filteredTasks = filteredTasks.filter((t) => t.status === status);
-    }
-
-    if (filteredTasks.length === 0) {
+    if (tasks.length === 0) {
       return {
         content: [{ type: "text", text: "No tasks found." }],
       };
     }
 
-    const taskList = filteredTasks
+    const taskList = tasks
       .map(
         (t) =>
           `- [${t.status === "done" ? "x" : " "}] #${t.id}: ${t.title}${
@@ -94,7 +75,7 @@ server.registerTool(
       content: [
         {
           type: "text",
-          text: `Tasks (${filteredTasks.length}):\n\n${taskList}`,
+          text: `Tasks (${tasks.length}):\n\n${taskList}`,
         },
       ],
     };
@@ -114,7 +95,7 @@ server.registerTool(
     },
   },
   async ({ id, status }) => {
-    const task = tasks.get(id);
+    const task = db.updateTask(id, status);
 
     if (!task) {
       return {
@@ -123,14 +104,11 @@ server.registerTool(
       };
     }
 
-    const oldStatus = task.status;
-    task.status = status;
-
     return {
       content: [
         {
           type: "text",
-          text: `Task #${id} updated: ${oldStatus} → ${status}\n\nTitle: ${task.title}`,
+          text: `Task #${id} updated to: ${status}\n\nTitle: ${task.title}`,
         },
       ],
     };
@@ -147,7 +125,7 @@ server.registerTool(
     },
   },
   async ({ id }) => {
-    const task = tasks.get(id);
+    const task = db.deleteTask(id);
 
     if (!task) {
       return {
@@ -155,8 +133,6 @@ server.registerTool(
         isError: true,
       };
     }
-
-    tasks.delete(id);
 
     return {
       content: [
@@ -177,17 +153,20 @@ server.registerTool(
     inputSchema: {},
   },
   async () => {
-    const all = Array.from(tasks.values());
-    const pending = all.filter((t) => t.status === "pending").length;
-    const inProgress = all.filter((t) => t.status === "in-progress").length;
-    const done = all.filter((t) => t.status === "done").length;
+    const summary = db.getSummary();
 
     return {
       content: [
         {
           type: "text",
-          text: `Task Summary:\n\n📋 Total: ${all.length}\n⏳ Pending: ${pending}\n🔄 In Progress: ${inProgress}\n✅ Done: ${done}\n\nCompletion rate: ${
-            all.length > 0 ? Math.round((done / all.length) * 100) : 0
+          text: `Task Summary:\n\n📋 Total: ${summary.total}\n⏳ Pending: ${
+            summary.pending
+          }\n🔄 In Progress: ${summary.inProgress}\n✅ Done: ${
+            summary.done
+          }\n\nCompletion rate: ${
+            summary.total > 0
+              ? Math.round((summary.done / summary.total) * 100)
+              : 0
           }%`,
         },
       ],
@@ -195,11 +174,22 @@ server.registerTool(
   },
 );
 
+// Graceful shutdown — close the database connection
+process.on("SIGINT", () => {
+  db.close();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  db.close();
+  process.exit(0);
+});
+
 // Start the server using stdio transport
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("Todo MCP Server running on stdio");
+  console.error("Todo MCP Server running on stdio (with SQLite persistence!)");
 }
 
 main().catch(console.error);
